@@ -67,7 +67,10 @@ OPTIMIZATIONS="-O3 -fomit-frame-pointer -fno-finite-math-only -DNDEBUG"
 MAKE_EXTRA=(OPTIMIZATIONS="${OPTIMIZATIONS}" BUILDOPENGL=no BUILDJACKAPP=no
             PREFIX="${prefix}" LV2DIR="${prefix}/lib/lv2")
 if [[ "${target}" == *-apple-* ]]; then
-    MAKE_EXTRA+=(UNAME=Darwin)
+    # Several Makefiles strip with `-s $(RW)lv2syms` and RW defaults to a
+    # missing robtk checkout; point at a local keep-list instead so the LV2
+    # entry point is retained without fetching the GUI toolkit.
+    MAKE_EXTRA+=(UNAME=Darwin STRIPFLAGS="-u -r -arch all -s lv2syms")
 elif [[ "${target}" == *-mingw* ]]; then
     MAKE_EXTRA+=(XWIN="${target}")
 fi
@@ -75,6 +78,7 @@ fi
 for d in balance.lv2 controlfilter.lv2 matrixmixer.lv2 mididebug.lv2 \
          midifilter.lv2 midigen.lv2 midimap.lv2 nodelay.lv2 onsettrigger.lv2 \
          phaserotate.lv2 stepseq.lv2 stereoroute.lv2 testsignal.lv2 xfade.lv2; do
+    echo "_lv2_descriptor" > "${d}/lv2syms"
     make -C "${d}" -j${nproc} "${MAKE_EXTRA[@]}"
     make -C "${d}" install "${MAKE_EXTRA[@]}"
 done
