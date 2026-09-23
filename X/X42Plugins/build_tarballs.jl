@@ -1,6 +1,6 @@
 # Note that this script can accept some limited command-line arguments, run
 # `julia build_tarballs.jl --help` to see a usage message.
-using BinaryBuilder
+using BinaryBuilder, Pkg
 
 # Robin Gareus' x42-plugins (https://github.com/x42/x42-plugins), LV2 only,
 # headless DSP: the 14 submodules that are GPL-2.0-or-later throughout and build
@@ -71,6 +71,9 @@ if [[ "${target}" == *-apple-* ]]; then
     # missing robtk checkout; point at a local keep-list instead so the LV2
     # entry point is retained without fetching the GUI toolkit.
     MAKE_EXTRA+=(UNAME=Darwin STRIPFLAGS="-u -r -arch all -s lv2syms")
+    # onsettrigger's complex bandpass needs `__divdc3` from compiler-rt.
+    export LDFLAGS="-L${libdir}/darwin -lclang_rt.osx ${LDFLAGS}"
+    MAKE_EXTRA+=(LDFLAGS="${LDFLAGS}")
 elif [[ "${target}" == *-mingw* ]]; then
     MAKE_EXTRA+=(XWIN="${target}")
 fi
@@ -106,12 +109,19 @@ products = [
 
 platforms = supported_platforms()
 
+llvm_version = v"13.0.1"
 dependencies = [
     Dependency("lv2_jll"),
     # phaserotate links libfftw3f at build and run time.
     Dependency("FFTW_jll"),
     Dependency("CompilerSupportLibraries_jll"),
+    # `__divdc3` for aarch64-apple (onsettrigger complex bandpass).
+    BuildDependency(PackageSpec(name = "LLVMCompilerRT_jll",
+                                uuid = "4e17d02c-6bf5-513e-be62-445f41c75a11",
+                                version = llvm_version);
+                    platforms = [Platform("aarch64", "macos")]),
 ]
 
 build_tarballs(ARGS, name, version, sources, script, platforms, products, dependencies;
-               julia_compat="1.10", preferred_gcc_version=v"10")
+               julia_compat = "1.10", preferred_gcc_version = v"10",
+               preferred_llvm_version = llvm_version)
