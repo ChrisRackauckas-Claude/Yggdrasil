@@ -109,7 +109,7 @@ products = [
 
 platforms = supported_platforms()
 
-llvm_version = v"13.0.1"
+llvm_version = v"17.0.6"
 dependencies = [
     Dependency("lv2_jll"),
     # phaserotate links libfftw3f at build and run time.
