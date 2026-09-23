@@ -93,7 +93,8 @@ products = [
     FileProduct("lib/lv2/nodelay.lv2/manifest.ttl", :nodelay_lv2),
     FileProduct("lib/lv2/onsettrigger.lv2/manifest.ttl", :onsettrigger_lv2),
     FileProduct("lib/lv2/phaserotate.lv2/manifest.ttl", :phaserotate_lv2),
-    FileProduct("lib/lv2/stepseq.lv2/manifest.ttl", :stepseq_lv2),
+    # Default grid is 8 steps × 8 notes; the Makefile names the bundle for that.
+    FileProduct("lib/lv2/stepseq_s8n8.lv2/manifest.ttl", :stepseq_lv2),
     FileProduct("lib/lv2/stereoroute.lv2/manifest.ttl", :stereoroute_lv2),
     FileProduct("lib/lv2/testsignal.lv2/manifest.ttl", :testsignal_lv2),
     FileProduct("lib/lv2/xfade.lv2/manifest.ttl", :xfade_lv2),
