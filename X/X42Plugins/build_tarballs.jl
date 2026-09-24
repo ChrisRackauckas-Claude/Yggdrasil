@@ -1,16 +1,16 @@
 # Note that this script can accept some limited command-line arguments, run
 # `julia build_tarballs.jl --help` to see a usage message.
-using BinaryBuilder
+using BinaryBuilder, Pkg
 
 # Robin Gareus' x42-plugins (https://github.com/x42/x42-plugins), LV2 only,
 # headless DSP: the 14 submodules that are GPL-2.0-or-later throughout and build
 # without OpenGL/JACK/cairo. Pinned to meta-repo commit 3fb6abe (2025-06-06).
 #
 # GPL-2.0-or-later: every shipped source says "either version 2 ... or (at your
-# option) any later version". Submodules that contain GPL-3.0-or-later code
-# (darc, dpl, fat1, meters, sisco, zconvo) are not in this artifact; of those,
-# meters and sisco also cannot build headless. fil4, tuna, spectra and mixtri
-# are GPL-2.0-or-later but need cairo/OpenGL/libltc and are excluded too.
+# option) any later version". Not packaged: dpl/fat1/meters/sisco/zconvo
+# (GPL-3.0-or-later source); darc (sources are v2-or-later, but COPYING is
+# GPLv3); meters/sisco also cannot build headless. fil4, tuna, spectra and
+# mixtri are GPL-2.0-or-later but need cairo/OpenGL/libltc and are excluded too.
 # midimap builds but needs worker:schedule at run time — still shipped so a
 # host that offers it can use it.
 name = "X42Plugins"
@@ -63,15 +63,20 @@ done
 # from the command line so the definition is displaced entirely.
 OPTIMIZATIONS="-O3 -fomit-frame-pointer -fno-finite-math-only -DNDEBUG"
 
-# Makefiles key off `uname` / XWIN rather than a cross triplet.
+# Install under share/lv2, not lib/lv2: BinaryBuilder's Windows audit moves
+# every .dll under lib/ into bin/ when it sees a "simple buildsystem", which
+# breaks LV2 bundles whose manifests name <plugin.dll> beside the ttl.
 MAKE_EXTRA=(OPTIMIZATIONS="${OPTIMIZATIONS}" BUILDOPENGL=no BUILDJACKAPP=no
-            PREFIX="${prefix}" LV2DIR="${prefix}/lib/lv2")
+            PREFIX="${prefix}" LV2DIR="${prefix}/share/lv2")
 if [[ "${target}" == *-apple-* ]]; then
     # Several Makefiles strip with `-s $(RW)lv2syms` and RW defaults to a
     # missing robtk checkout; point at a local keep-list instead so the LV2
     # entry point is retained without fetching the GUI toolkit.
     MAKE_EXTRA+=(UNAME=Darwin STRIPFLAGS="-u -r -arch all -s lv2syms")
+fi
+if [[ "${target}" == aarch64-apple-* ]]; then
     # onsettrigger's complex bandpass needs `__divdc3` from compiler-rt.
+    # Gate on aarch64 only: LLVMCompilerRT_jll is not a dependency on x86_64.
     export LDFLAGS="-L${libdir}/darwin -lclang_rt.osx ${LDFLAGS}"
     MAKE_EXTRA+=(LDFLAGS="${LDFLAGS}")
 elif [[ "${target}" == *-mingw* ]]; then
@@ -81,33 +86,56 @@ fi
 for d in balance.lv2 controlfilter.lv2 matrixmixer.lv2 mididebug.lv2 \
          midifilter.lv2 midigen.lv2 midimap.lv2 nodelay.lv2 onsettrigger.lv2 \
          phaserotate.lv2 stepseq.lv2 stereoroute.lv2 testsignal.lv2 xfade.lv2; do
-    echo "_lv2_descriptor" > "${d}/lv2syms"
+    # Keep-list only on macOS (STRIPFLAGS); elsewhere it would install as junk.
+    if [[ "${target}" == *-apple-* ]]; then
+        echo "_lv2_descriptor" > "${d}/lv2syms"
+    fi
     make -C "${d}" -j${nproc} "${MAKE_EXTRA[@]}"
     make -C "${d}" install "${MAKE_EXTRA[@]}"
 done
+
+# Do not leave a stray lv2syms inside any installed bundle.
+find "${prefix}/share/lv2" -name lv2syms -delete
 """
 
+# Manifests for Julia path discovery; LibraryProducts for the binaries so a
+# moved or missing .so/.dll/.dylib fails the audit (manifest-only products
+# would not notice Windows' auto-move into bin/).
 products = [
-    # Bundle manifests, not the .so/.dll/.dylib: the extension differs per
-    # platform, and FileProduct paths must be identical everywhere.
-    FileProduct("lib/lv2/balance.lv2/manifest.ttl", :balance_lv2),
-    FileProduct("lib/lv2/controlfilter.lv2/manifest.ttl", :controlfilter_lv2),
-    FileProduct("lib/lv2/matrixmixer.lv2/manifest.ttl", :matrixmixer_lv2),
-    FileProduct("lib/lv2/mididebug.lv2/manifest.ttl", :mididebug_lv2),
-    FileProduct("lib/lv2/midifilter.lv2/manifest.ttl", :midifilter_lv2),
-    FileProduct("lib/lv2/midigen.lv2/manifest.ttl", :midigen_lv2),
-    FileProduct("lib/lv2/midimap.lv2/manifest.ttl", :midimap_lv2),
-    FileProduct("lib/lv2/nodelay.lv2/manifest.ttl", :nodelay_lv2),
-    FileProduct("lib/lv2/onsettrigger.lv2/manifest.ttl", :onsettrigger_lv2),
-    FileProduct("lib/lv2/phaserotate.lv2/manifest.ttl", :phaserotate_lv2),
-    # Default grid is 8 steps × 8 notes; the Makefile names the bundle for that.
-    FileProduct("lib/lv2/stepseq_s8n8.lv2/manifest.ttl", :stepseq_lv2),
-    FileProduct("lib/lv2/stereoroute.lv2/manifest.ttl", :stereoroute_lv2),
-    FileProduct("lib/lv2/testsignal.lv2/manifest.ttl", :testsignal_lv2),
-    FileProduct("lib/lv2/xfade.lv2/manifest.ttl", :xfade_lv2),
+    FileProduct("share/lv2/balance.lv2/manifest.ttl", :balance_lv2),
+    FileProduct("share/lv2/controlfilter.lv2/manifest.ttl", :controlfilter_lv2),
+    FileProduct("share/lv2/matrixmixer.lv2/manifest.ttl", :matrixmixer_lv2),
+    FileProduct("share/lv2/mididebug.lv2/manifest.ttl", :mididebug_lv2),
+    FileProduct("share/lv2/midifilter.lv2/manifest.ttl", :midifilter_lv2),
+    FileProduct("share/lv2/midigen.lv2/manifest.ttl", :midigen_lv2),
+    FileProduct("share/lv2/midimap.lv2/manifest.ttl", :midimap_lv2),
+    FileProduct("share/lv2/nodelay.lv2/manifest.ttl", :nodelay_lv2),
+    FileProduct("share/lv2/onsettrigger.lv2/manifest.ttl", :onsettrigger_lv2),
+    FileProduct("share/lv2/phaserotate.lv2/manifest.ttl", :phaserotate_lv2),
+    FileProduct("share/lv2/stepseq_s8n8.lv2/manifest.ttl", :stepseq_lv2),
+    FileProduct("share/lv2/stereoroute.lv2/manifest.ttl", :stereoroute_lv2),
+    FileProduct("share/lv2/testsignal.lv2/manifest.ttl", :testsignal_lv2),
+    FileProduct("share/lv2/xfade.lv2/manifest.ttl", :xfade_lv2),
+    LibraryProduct("balance", :balance_bin, "share/lv2/balance.lv2"; dont_dlopen = true),
+    LibraryProduct("controlfilter", :controlfilter_bin, "share/lv2/controlfilter.lv2"; dont_dlopen = true),
+    LibraryProduct("matrixmixer", :matrixmixer_bin, "share/lv2/matrixmixer.lv2"; dont_dlopen = true),
+    LibraryProduct("mididebug", :mididebug_bin, "share/lv2/mididebug.lv2"; dont_dlopen = true),
+    LibraryProduct("midifilter", :midifilter_bin, "share/lv2/midifilter.lv2"; dont_dlopen = true),
+    LibraryProduct("midigen", :midigen_bin, "share/lv2/midigen.lv2"; dont_dlopen = true),
+    LibraryProduct("midimap", :midimap_bin, "share/lv2/midimap.lv2"; dont_dlopen = true),
+    LibraryProduct("nodelay", :nodelay_bin, "share/lv2/nodelay.lv2"; dont_dlopen = true),
+    LibraryProduct("onsettrigger", :onsettrigger_bin, "share/lv2/onsettrigger.lv2"; dont_dlopen = true),
+    LibraryProduct("phaserotate", :phaserotate_bin, "share/lv2/phaserotate.lv2"; dont_dlopen = true),
+    LibraryProduct("stepseq", :stepseq_bin, "share/lv2/stepseq_s8n8.lv2"; dont_dlopen = true),
+    LibraryProduct("stereoroute", :stereoroute_bin, "share/lv2/stereoroute.lv2"; dont_dlopen = true),
+    LibraryProduct("testsignal", :testsignal_bin, "share/lv2/testsignal.lv2"; dont_dlopen = true),
+    LibraryProduct("xfade", :xfade_bin, "share/lv2/xfade.lv2"; dont_dlopen = true),
 ]
 
 platforms = supported_platforms()
+
+# Pin LLVMCompilerRT together with preferred_llvm_version (GibbsSeaWater et al.).
+llvm_version = v"13.0.1"
 
 dependencies = [
     Dependency("lv2_jll"),
@@ -115,9 +143,12 @@ dependencies = [
     Dependency("FFTW_jll"),
     Dependency("CompilerSupportLibraries_jll"),
     # `__divdc3` for aarch64-apple (onsettrigger complex bandpass).
-    BuildDependency("LLVMCompilerRT_jll";
+    BuildDependency(PackageSpec(name = "LLVMCompilerRT_jll",
+                                uuid = "4e17d02c-6bf5-513e-be62-445f41c75a11",
+                                version = llvm_version);
                     platforms = [Platform("aarch64", "macos")]),
 ]
 
 build_tarballs(ARGS, name, version, sources, script, platforms, products, dependencies;
-               julia_compat = "1.10", preferred_gcc_version = v"10")
+               julia_compat = "1.10", preferred_gcc_version = v"10",
+               preferred_llvm_version = llvm_version)
