@@ -135,7 +135,10 @@ products = [
 platforms = supported_platforms()
 
 # Pin LLVMCompilerRT together with preferred_llvm_version (catchaMouse16 et al.).
+# PackageSpec needs the build metadata (+0); preferred_llvm_version takes the
+# bare version BinaryBuilder selects the toolchain with.
 llvm_version = v"17.0.6"
+llvm_compiler_rt_version = VersionNumber("17.0.6+0")
 
 dependencies = [
     Dependency("lv2_jll"),
@@ -145,7 +148,7 @@ dependencies = [
     # `__divdc3` for aarch64-apple (onsettrigger complex bandpass).
     BuildDependency(PackageSpec(name = "LLVMCompilerRT_jll",
                                 uuid = "4e17d02c-6bf5-513e-be62-445f41c75a11",
-                                version = llvm_version);
+                                version = llvm_compiler_rt_version);
                     platforms = [Platform("aarch64", "macos")]),
 ]
 
