@@ -134,8 +134,8 @@ products = [
 
 platforms = supported_platforms()
 
-# Pin LLVMCompilerRT together with preferred_llvm_version (GibbsSeaWater et al.).
-llvm_version = v"13.0.1"
+# Pin LLVMCompilerRT together with preferred_llvm_version (catchaMouse16 et al.).
+llvm_version = v"17.0.6"
 
 dependencies = [
     Dependency("lv2_jll"),
